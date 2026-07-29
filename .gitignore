@@ -1,0 +1,88 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Python Build
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Pytest / Coverage
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Streamlit Cache
+# =========================
+.streamlit/secrets.toml
+
+# =========================
+# AI Video Assistant
+# =========================
+
+# Downloaded audio/video files
+downloades/
+downloads/
+
+# Vector database
+vector_db/
+
+# Whisper cache (optional)
+models/
+
+# Temporary audio/video
+*.wav
+*.mp3
+*.mp4
+*.m4a
+*.webm
+
+# FFmpeg temporary files
+*.tmp
+
+# Chroma database
+chroma.sqlite3
