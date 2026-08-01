@@ -1,6 +1,4 @@
 import os
-import json
-import tempfile
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -24,79 +22,17 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Persistence (so results + chat survive a browser refresh)
-# ---------------------------------------------------------------------------
-STATE_FILE = os.path.join(tempfile.gettempdir(), "ai_video_assistant_state.json")
-
-
-def save_state(result: dict, chat_history: list) -> None:
-    """Persist everything except the live rag_chain object (not serializable)."""
-    serializable = {
-        "title": result.get("title"),
-        "transcript": result.get("transcript"),
-        "summary": result.get("summary"),
-        "action_items": result.get("action_items"),
-        "key_decisions": result.get("key_decisions"),
-        "open_questions": result.get("open_questions"),
-        "chat_history": chat_history,
-    }
-    try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(serializable, f)
-    except Exception:
-        pass  # persistence is a nice-to-have, never break the app over it
-
-
-def load_state():
-    if not os.path.exists(STATE_FILE):
-        return None
-    try:
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-def clear_state() -> None:
-    try:
-        if os.path.exists(STATE_FILE):
-            os.remove(STATE_FILE)
-    except Exception:
-        pass
-
-
-# ---------------------------------------------------------------------------
 # Session state
 # ---------------------------------------------------------------------------
+# NOTE: We intentionally do NOT persist results/chat history to disk anymore.
+# Everything lives only in st.session_state, so every fresh app open (new
+# browser session) starts clean on the "Enter a YouTube URL..." dashboard.
+# A same-tab rerun (clicking buttons, asking chat questions, etc.) still
+# keeps state, because that's the same Streamlit session.
 if "result" not in st.session_state:
     st.session_state.result = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-if "restored" not in st.session_state:
-    st.session_state.restored = False
-
-# On a fresh session (e.g. after a page refresh), try to restore from disk.
-if not st.session_state.restored:
-    st.session_state.restored = True
-    saved = load_state()
-    if saved and saved.get("transcript"):
-        with st.spinner("Restoring your last session…"):
-            try:
-                rag_chain = build_rag_chain(saved["transcript"])
-                st.session_state.result = {
-                    "title": saved.get("title"),
-                    "transcript": saved.get("transcript"),
-                    "summary": saved.get("summary"),
-                    "action_items": saved.get("action_items"),
-                    "key_decisions": saved.get("key_decisions"),
-                    "open_questions": saved.get("open_questions"),
-                    "rag_chain": rag_chain,
-                }
-                st.session_state.chat_history = saved.get("chat_history", [])
-            except Exception:
-                # If rebuilding the chat engine fails, just drop the restore attempt.
-                st.session_state.result = None
-                st.session_state.chat_history = []
 
 
 # ---------------------------------------------------------------------------
@@ -111,12 +47,37 @@ st.markdown(
             font-family: 'Inter', sans-serif;
         }
 
+        /* Emoji / icon glyphs need their own font stack, otherwise the
+           'Inter' override above strips them down to a blank color box. */
+        .emoji-icon {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+                         "Noto Color Emoji", sans-serif !important;
+        }
+
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
+
+        /* ---- Remove the white Streamlit header bar so the gradient is one
+               continuous color from the very top of the page ---- */
+        header[data-testid="stHeader"] {
+            background: transparent;
+            box-shadow: none;
+        }
+        div[data-testid="stDecoration"] {
+            background: transparent;
+        }
+        div[data-testid="stToolbar"] {
+            display: none;
+        }
 
         /* ---- App background ---- */
         .stApp {
             background: linear-gradient(180deg, #0f1220 0%, #171a2b 100%);
+        }
+        /* Make sure the very top of the main view container also matches
+           (some Streamlit versions add a solid block behind the header) */
+        section[data-testid="stAppViewContainer"] {
+            background: transparent;
         }
 
         /* ---- Sidebar ---- */
@@ -218,10 +179,37 @@ st.markdown(
             font-weight: 600;
             margin-bottom: 1rem;
         }
+
+        .app-icon-svg {
+            vertical-align: -4px;
+            margin-right: 8px;
+        }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+# Reusable inline SVG "clapperboard" icon (renders identically everywhere,
+# unlike the 🎬 emoji which was being swallowed by the Inter font override).
+CLAPPER_ICON_SVG = """
+<svg class="app-icon-svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" style="display:inline-block;">
+  <defs>
+    <linearGradient id="clapperGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="9" width="18" height="12" rx="2" fill="url(#clapperGrad)"/>
+  <path d="M3 9L4.5 4.5L8 5.5L6.5 9H3Z" fill="url(#clapperGrad)"/>
+  <path d="M8.5 5.7L12 6.7L10.5 9H7L8.5 5.7Z" fill="url(#clapperGrad)"/>
+  <path d="M13 6.9L16.5 7.9L15 9H11.5L13 6.9Z" fill="url(#clapperGrad)"/>
+  <path d="M17.5 8L21 9L21 9.3L17.5 9.3L17.5 8Z" fill="url(#clapperGrad)"/>
+  <rect x="3" y="9" width="18" height="2" fill="#171a2b" opacity="0.25"/>
+  <circle cx="8" cy="15.5" r="1.4" fill="#171a2b" opacity="0.3"/>
+  <circle cx="16" cy="15.5" r="1.4" fill="#171a2b" opacity="0.3"/>
+</svg>
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +259,8 @@ def run_pipeline(source: str, language: str) -> dict:
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown(
-        "<div style='font-size:1.6rem; font-weight:800;'>🎬 AI Video Assistant</div>",
+        f"<div style='font-size:1.6rem; font-weight:800; display:flex; align-items:center;'>"
+        f"{CLAPPER_ICON_SVG}<span>AI Video Assistant</span></div>",
         unsafe_allow_html=True,
     )
     st.caption("Turn any video or meeting into a summary you can chat with.")
@@ -298,6 +287,7 @@ with st.sidebar:
         )
         if uploaded_file is not None:
             # Persist the upload to a temp path so process_input() can read it like a normal file path
+            import tempfile
             suffix = os.path.splitext(uploaded_file.name)[1]
             tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
             tmp_file.write(uploaded_file.getbuffer())
@@ -315,15 +305,13 @@ with st.sidebar:
         else:
             st.session_state.result = run_pipeline(str(source).strip(), language)
             st.session_state.chat_history = []
-            save_state(st.session_state.result, st.session_state.chat_history)
 
     if st.session_state.result:
         st.divider()
-        st.markdown("<span class='status-pill'>● Session active — auto-saved</span>", unsafe_allow_html=True)
+        st.markdown("<span class='status-pill'>● Session active</span>", unsafe_allow_html=True)
         if st.button("Start Over", use_container_width=True):
             st.session_state.result = None
             st.session_state.chat_history = []
-            clear_state()
             st.rerun()
 
 
@@ -333,7 +321,11 @@ with st.sidebar:
 result = st.session_state.result
 
 if result is None:
-    st.markdown("<div class='hero-title'>🎬 AI Video Assistant</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='hero-title' style='display:flex; align-items:center;'>"
+        f"{CLAPPER_ICON_SVG}<span>AI Video Assistant</span></div>",
+        unsafe_allow_html=True,
+    )
     st.markdown(
         "<div class='hero-subtitle'>Enter a YouTube URL or upload a file in the sidebar and click "
         "<b>Analyze Video</b> to get started.</div>",
@@ -343,8 +335,7 @@ if result is None:
         """
         <div class="glass-card">
         You'll get a <b>title</b>, <b>summary</b>, <b>action items</b>, <b>key decisions</b>,
-        <b>open questions</b>, and a <b>chat assistant</b> for the video — and it'll all still be
-        here even if you refresh the page.
+        <b>open questions</b>, and a <b>chat assistant</b> for the video.
         </div>
         """,
         unsafe_allow_html=True,
@@ -390,6 +381,3 @@ else:
                     answer = ask_question(result["rag_chain"], question)
                 st.write(answer)
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
-
-            # Persist after every chat turn so refresh keeps the conversation too
-            save_state(result, st.session_state.chat_history)
